@@ -1,0 +1,390 @@
+---
+output: html_document
+--- 
+## **Predicting Breast Cancer Using Machine Learning Algorithms** 
+#### Jasmine Pham  
+\right<span style="color: grey;">June 16, 2020</span>\right  
+
+  [LinkedIn](https://www.linkedin.com/in/jasmine-pham)  
+  [Email](mailto:pnhuanh97@gmail.com)  
+
+***
+
+#### _**Table of Contents**_
+* [Introduction](#**Introduction**) 
+  + [Problem Identification](#**Problem Identification**)
+  + [Objective](#**Objective**)
+* [Data Exploration](#**Data Exploration**) 
+* [Classification Models in Machine Learning](#**Classification Models in Machine Learning**) 
+  + [Logistic Regression](#**Logistic Regression**) 
+  + [Decision Tree](#**Decision Tree**) 
+  + [Random Forest](#**Random Forest**) 
+  + [Gradient Boosting Machine](#**Gradient Boosting Machine**) 
+* [Model Selection and Evaluation](#**Model Selection and Evaluation**) 
+* [Conclusion](#**Conclusion**)
+
+***
+
+## <a id="**Introduction**"></a>**Introduction**
+### <a id="**Problem Identification*"></a>**Problem Identification**
+Breast cancer is cancer that forms in breast cells. It's the second most common and also the second leading cause of cancer deaths in women in the United States. According to the American Cancer Society, on average every 1 in 8 women in the United States would develop breast cancer in her lifetime and 2.6% would die from breast cancer.
+One of the warning symptoms of breast cancer is the development of a tumor in the breast. A tumor, however, could be either benign or malignant. 
+
+### <a id="**Objective**"></a>**Objective**
+This project aims to predict whether an individual has breast cancer and determine which cytological attributes are significant in identifying benign and malignant tumors. To achieve this, I performed four different classification models in machine learning, namely Logistic Regression, Decision Tree, Random Forest, and Gradient Boosting Machine, on a dataset obtained from the [UCI Machine Learning Repository](https://www.https://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+%28Diagnostic%29). This dataset was created by Dr. William H. Wolberg from the University of Wisconsin, who took a digital scan of the fine-needle aspirates from patients with solid breast masses. Then, he used a graphical computer program called Xcyt to calculate ten cytological characteristics present in each digitized image. These features are as follows:
+
+```{r echo = FALSE, warning = FALSE, message = FALSE}
+library(dplyr)
+library(kableExtra)
+Num <- seq(1:10)
+Attribute <- c("Sample Code Number", "Clump Thickness", "Uniformity of Cell Size", "Uniformity of Cell Shape", "Marginal Adhesion", "Single Epithelial Cell Size", "Bare Nuclei ", "Bland Chromatin", "Normal Nucleoli", "Mitoses ")
+Domain <- c("ID number", "1 - 10", "1 - 10", "1 - 10", "1 - 10", "1 - 10", "1 - 10", "1 - 10", "1 - 10", "1 - 10")
+attr <- data.frame(Num, Attribute, Domain) %>% rename("#" = "Num")
+kable(attr) %>%  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"), full_width = F, font_size = 13)
+```
+
+## <a id="**Data Exploration**"></a>**Data Exploration**
+```{r message = FALSE, warning = FALSE}
+library(tidyverse)
+library(dplyr)
+library(pROC)
+library(MLmetrics)
+library(rpart)
+library(rpart.plot) 
+library(randomForest)
+library(varImp)
+library(gbm)
+library(caret)
+```
+
+```{r}
+url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data"
+data <- read.csv(file = url, header = FALSE,
+                 col.names = c("ID","clump_thickness", "uniformity_size", "uniformity_shape", "marginal_adhesion", "single_epithelial_cell_size", "bare_nuclei", "bland_chromatin", "normal_nucleoli","mitoses", "diagnosis"))
+
+str(data)
+sum(data$bare_nuclei != "?")
+```
+
+The dataset includes cytological characteristics of fluid samples from 699 patients. The first column consists of unique identifiers that wouldn't be helpful for our model, so we'll first take them out.
+```{r}
+data <- select(data, -1)
+```
+
+We'll also exclude the 16 data points that has missing values in the *bare_nuclei* column. 
+```{r}
+data <- data[data$bare_nuclei != "?",] %>% mutate(bare_nuclei = as.integer(bare_nuclei))
+```
+
+The dependent variable *diagnosis* is now denoted as 2 that stands for "benign" and 4 that stands for "malignant". We'll convert it into a binary variable of 0 and 1 respectively.
+```{r fig.align= "center"}
+data <- data %>% mutate(diagnosis = ifelse(diagnosis == 2, 0, 1),
+                        diagnosis = as.factor(diagnosis))
+summary(data)
+ggplot(data, aes(x = diagnosis)) +
+  geom_bar(fill = "#fc9272") +
+  ggtitle("Distribution of Diagnosis in the Entire Dataset") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+  
+After data cleaning, we now have 683 valid observations, of which 444 has a benign breast tumor and the other 239 has a malignant breast tumor.
+
+## <a id="**Classification Models in Machine Learning**"></a>**Classification Models in Machine Learning**
+
+In order to develop an accurate binary classification model, we first split our dataset randomly into a training and a test set.
+```{r}
+set.seed(3011) 
+train_index <- sample(nrow(data), size = round(0.75 * nrow(data)), replace = FALSE)
+train <- data[train_index,]
+test <- data[-train_index,]
+```
+
+### <a id="**Logistic Regression**"></a>**Logistic Regression**
+```{r fig.align = "center"}
+# Develop and tune the logistic regression model on the training dataset
+lm <- glm(formula = diagnosis ~ ., data = train, family = binomial())
+summary(lm)
+lm2 <- glm(formula = diagnosis ~ ., data = train %>% select(-c(uniformity_size, single_epithelial_cell_size, mitoses)), family = binomial())
+summary(lm2)
+lm3 <- glm(formula = diagnosis ~ ., data = train %>% select(-c(uniformity_size, single_epithelial_cell_size, bare_nuclei, mitoses)), family = binomial())
+summary(lm3)
+
+pred_train_lm <- predict(lm3, train, type = 'response')
+AUC_train_lm <- roc(train$diagnosis, pred_train_lm, percent = TRUE, plot = TRUE, print.auc = TRUE)
+hist(pred_train_lm, 
+     main = "Distribution of Predicted Values",
+     xlab = "Predicted Values", 
+     col = "#6baed6",
+     border = NULL)
+
+```
+
+The histogram is positively skewed, which is understandable because in our original dataset, we have almost twice as many benign tumors than malignant lumps. With that being said, if we use the regular threshold of 0.5 to categorize the predicted values into binary levels, we would end up with an unfitted model. Therefore, we now create a loop to find the threshold that maximizes classification performance metrics.
+
+```{r}
+accuracy <- 0
+f1 <- 0
+threshold <- 0
+
+for(i in seq(0.1, 0.9, by = 0.01)){
+  pred_cat_train <- ifelse(pred_train_lm < i, 0, 1)
+  a = Accuracy(y_true = train$diagnosis, y_pred = pred_cat_train)
+  b = F1_Score(y_true = train$diagnosis, y_pred = pred_cat_train)
+  
+  if(a > accuracy & b > f1){
+    accuracy = a
+    f1 = b
+    threshold = i
+  }
+}
+accuracy
+f1 
+threshold 
+
+```
+
+Now let's apply the final logistic regression model to our test dataset as well as calculate and display different performance measures using the optimized threshold of 0.48
+```{r  fig.align = "center"}
+pred_test_lm <- predict(lm3, test, type = 'response')
+
+AUC_test_lm <- roc(test$diagnosis, pred_test_lm, percent = TRUE, plot = TRUE, print.auc = TRUE)
+pred_cat_test <- ifelse(pred_test_lm >= 0.48, 1, 0)
+Accuracy(y_true = test$diagnosis, y_pred = pred_cat_test) 
+F1_Score(y_true = test$diagnosis, y_pred = pred_cat_test) 
+ConfusionMatrix(y_true = test$diagnosis, y_pred = pred_cat_test)
+```
+
+
+### <a id="**Decision Tree**"></a>**Decision Tree**
+We will run the decision tree model through a grid search of *minsplit* (the minimum number of observations in each split) and *maxdepth* (the maximum depth of the tree) in order to find the optimized combination of hyperparameters.
+```{r fig.show = "hide", message = FALSE}
+AUC_train_besttree <- 0
+AUC_test_besttree <- 0
+AUC_tree <- data.frame(AUC_train_tree = numeric(), AUC_test_tree = numeric())
+
+set.seed(3011)
+tree_parameters <- data.frame(minsplit_para = floor(runif(8, 10, 60)), 
+                              maxdepth_para = floor(runif(8, 10, 30)))
+
+for(para_comb in 1:nrow(tree_parameters)){
+  decision_tree <- rpart(diagnosis ~ .,  data = train,
+                      control = rpart.control(minsplit = tree_parameters[para_comb, "minsplit_para"], 
+                                              maxdepth = tree_parameters[para_comb, "maxdepth_para"])) 
+  
+  pred_train_tree <- as.data.frame(predict(decision_tree, train, type='prob'))
+  AUC_train_tree <- roc(train$diagnosis, pred_train_tree$`1`, percent = TRUE, plot = TRUE)
+  
+  pred_test_tree <- as.data.frame(predict(decision_tree, test, type='prob'))
+  AUC_test_tree <- roc(test$diagnosis, pred_test_tree$`1`, percent = TRUE, plot = TRUE)
+
+  AUC_tree[para_comb, ] <- c(round(AUC_train_tree$auc, 2), round(AUC_test_tree$auc, 2))
+  AUC_train_besttree = ifelse(AUC_train_besttree > AUC_train_tree$auc, AUC_train_besttree, AUC_train_tree$auc)
+  AUC_test_besttree = ifelse(AUC_test_besttree > AUC_test_tree$auc, AUC_test_besttree, AUC_test_tree$auc)
+}
+
+```
+
+```{r include = FALSE}
+train <- train %>% mutate(diagnosis = as.numeric(as.character(diagnosis)),
+                          diagnosis = ifelse(diagnosis == 0, "benign", "malignant"))
+```
+
+```{r echo = FALSE}
+kable(cbind(tree_parameters, AUC_tree)) %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"), full_width = F) %>%
+  row_spec(8, color = "white", background = "#e86547")
+```
+According to our grid search, the best decision tree has a minsplit of 11 and maxdepth of 10.
+```{r fig.align = "center"}
+best_decision_tree <- rpart(diagnosis ~., data = train,
+                            control = rpart.control(minsplit = 11,
+                                                    maxdepth = 10))
+rpart.plot(x = best_decision_tree, box.palette="RdBu", shadow.col="gray", nn=TRUE, yesno = 2)
+```
+
+### <a id="**Random Forest**"></a>**Random Forest**
+Similarly, we will run the random forest model through a grid search to find the optimized combination of hyperparameters. The hyperparameters used are *nodesize* (the minimum number of observations in the terminal nodes), *sampsize* (the sample size of each tree), *mtry*(the number of variables to be considered for each tree), and *ntree*(the number of decision trees that constitute the forest).
+
+```{r include = FALSE}
+train$diagnosis <- ifelse(train$diagnosis == "benign", 0, 1) %>% as.factor()
+best_decision_tree <- rpart(diagnosis ~., data = train,
+                            control = rpart.control(minsplit = 11,
+                                                    maxdepth = 10))
+```
+
+```{r fig.show = "hide", message = FALSE, results = "hide"}
+AUC_train_bestrf <- 0
+AUC_test_bestrf <- 0
+AUC_rf <- data.frame(AUC_train_rf = numeric(), AUC_test_rf = numeric()) 
+
+set.seed(160)
+rf_parameters <- data.frame(nodesize = round(runif(10,5,20)),
+                            sampsize= round(runif(10,1,400)),
+                            mtry = round(runif(10,1,10)),
+                            ntree = round(runif(10,1,400)))
+
+for(paracomb_rf in 1:nrow(rf_parameters)){
+  random_forest <- randomForest(diagnosis ~ ., data = train,
+                                nodesize = rf_parameters[paracomb_rf, "nodesize"],
+                                sampsize = rf_parameters[paracomb_rf, "sampsize"],
+                                mtry = rf_parameters[paracomb_rf, "mtry"],
+                                ntree = rf_parameters[paracomb_rf, "ntree"])
+  
+  pred_train_rf <- as.data.frame(predict(random_forest, train, type='prob'))
+  AUC_train_rf <- roc(train$diagnosis, pred_train_rf$`1`, percent = TRUE, plot = TRUE)
+  
+  pred_test_rf <- as.data.frame(predict(random_forest, test, type='prob'))
+  AUC_test_rf <- roc(test$diagnosis, pred_test_rf$`1`, percent = TRUE, plot = TRUE) 
+  
+  AUC_rf[paracomb_rf, ] <- c(round(AUC_train_rf$au, 2), round(AUC_test_rf$auc, 2))
+  AUC_train_bestrf = ifelse(AUC_train_bestrf > AUC_train_rf$auc, AUC_train_bestrf, AUC_train_rf$auc)
+  AUC_test_bestrf = ifelse(AUC_test_bestrf > AUC_test_rf$auc, AUC_test_bestrf, AUC_test_rf$auc)
+}
+```
+
+```{r echo = FALSE}
+kable(cbind(rf_parameters, AUC_rf)) %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"), full_width = F) %>%
+  row_spec(9, color = "white", background = "#e86547")
+```
+
+According to the grid search, the best random forest model would have a nodesize of 9, sampsize of 329, mtry of 7, and ntree of 210.
+
+```{r fig.align = "center"}
+best_random_forest <- randomForest(diagnosis ~ ., data = train,
+                                   nodesize = 9,
+                                   sampsize = 329,
+                                   mtry = 7,
+                                   ntree = 210)
+best_random_forest
+
+# Identify the most significant independent variables
+varImpPlot(best_random_forest)
+```
+
+
+### <a id="**Gradient Boosting Machine**"></a>**Gradient Boosting Machine**
+Lastly, we will run the gradient boosting model through a grid search to find the optimized combination of hyperparameters. The hyperparameters used are *n.trees* (the number of decision trees), *shrinkage* (learning rate), *interaction.depth*(the depth of each tree) *bag.fraction*(the sample size of each tree as a fraction of the dataset), and *n.minobsinnode* (the minimum number of observations in the terminal nodes).
+
+```{r include = FALSE}
+train <- train %>% mutate(diagnosis = as.numeric(as.character(diagnosis)))
+```
+
+```{r fig.show = "hide", echo = TRUE, results = "hide", message = FALSE}
+AUC_train_bestgb <- 0
+AUC_test_bestgb <-0
+AUC_gb <- data.frame(AUC_train_gb = numeric(), AUC_test_gb = numeric()) 
+
+set.seed(3011)
+gb_parameters <- data.frame(sample_size = round(runif(10,0.5,1), 2),
+                           min_size= round(runif(10,5,20)),
+                           num_tree = round(runif(10,20,200)),
+                           shrink = round(runif(10,0.1,0.5), 2))
+
+for(paracomb_gb in 1:nrow(gb_parameters)){
+  gradient_boosting <- gbm(diagnosis ~ ., data = train, 
+                           distribution = "bernoulli",
+                           n.trees = gb_parameters[paracomb_gb,'num_tree'],
+                           shrinkage = gb_parameters[paracomb_gb,'shrink'], 
+                           interaction.depth = 3,
+                           bag.fraction = gb_parameters[paracomb_gb,'sample_size'], 
+                           n.minobsinnode = gb_parameters[paracomb_gb,'min_size'], 
+                           verbose = TRUE)
+
+  pred_train_gb <- predict(gradient_boosting, train, type = "response", n.trees = gb_parameters[paracomb_gb,'num_tree'])
+  AUC_train_gb <- roc(train$diagnosis, pred_train_gb, percent = TRUE, plot = TRUE)
+  
+  pred_test_gb <- predict(gradient_boosting, test, type = "response", n.trees = gb_parameters[paracomb_gb,'num_tree'])
+  AUC_test_gb <- roc(test$diagnosis, pred_test_gb, percent = TRUE, plot = TRUE) 
+  
+  AUC_gb[paracomb_gb, ] <- c(round(AUC_train_gb$auc,2), round(AUC_test_gb$auc,2))
+  AUC_train_bestgb = ifelse(AUC_train_bestgb > AUC_train_gb$auc, AUC_train_bestgb, AUC_train_gb$auc)
+  AUC_test_bestgb = ifelse(AUC_test_bestgb > AUC_test_gb$auc, AUC_test_bestgb, AUC_test_gb$auc)
+  
+}
+
+```
+
+```{r echo = FALSE}
+kable(cbind(gb_parameters, AUC_gb)) %>%  
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"), full_width = F) %>%
+  row_spec(9, color = "white", background = "#e86547")
+```
+According to our grid search, the best gradient boosting model would have be as follows:
+
+```{r fig.align = "center"}
+best_gradient_boosting <- gbm(diagnosis ~ ., data = train, 
+                           distribution = "bernoulli",
+                           n.trees = 159,
+                           shrinkage = 0.42, 
+                           interaction.depth = 3,
+                           bag.fraction = 0.55, 
+                           n.minobsinnode = 6, 
+                           verbose = TRUE)
+```
+
+### <a id="**Model Selection and Evaluation**"></a>**Model Selection and Evaluation**
+Now, we will evaluate all four classification models by comparing their area under the curve (AUC) when fitted into the training, test, and the entire datasets.
+```{r include = FALSE}
+model_name <- rbind("Logistic Regression", "Decision Tree", "Random Forest", "Gradient Boosting Machine")
+AUC_values <- data.frame(Model = character(),
+                         AUC_train = numeric(), 
+                         AUC_test = numeric(),
+                         AUC_data = numeric())
+
+pred_lm <- predict(lm3, data, type = 'response')
+AUC_lm <- roc(data$diagnosis, pred_lm, percent = TRUE, plot = TRUE, print.auc = TRUE)
+
+pred_tree <- as.data.frame(predict(best_decision_tree, data, type='prob'))
+AUC_tree <- roc(data$diagnosis, pred_tree$`1`, percent = TRUE, plot = TRUE) 
+
+pred_rf <- as.data.frame(predict(best_random_forest, data, type='prob'))
+AUC_rf <- roc(data$diagnosis, pred_rf$`1`, percent = TRUE, plot = TRUE)
+
+pred_gb <- predict(best_gradient_boosting, data, type = "response", n.trees = 159)
+AUC_gb <- roc(data$diagnosis, pred_gb, percent = TRUE, plot = TRUE)
+
+AUC_values[c(1,2,3,4),c(2,3,4)] <- c(rbind(AUC_train_lm$auc, AUC_train_besttree, AUC_train_bestrf, AUC_train_bestgb), rbind(AUC_test_lm$auc, AUC_test_besttree, AUC_test_bestrf, AUC_test_bestgb), rbind(AUC_lm$auc, AUC_tree$auc, AUC_rf$auc, AUC_gb$auc))
+AUC_values$Model <- model_name
+AUC_values <- AUC_values %>% mutate(AUC_train = round(AUC_train, 2),
+                                    AUC_test = round(AUC_test, 2),
+                                    AUC_data = round(AUC_data, 2))
+
+```
+
+```{r}
+kable(AUC_values) %>%  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"), full_width = F)
+```
+
+All four models have a high performance, probably due to the extreme differences in cytological features between benign and malignant tumors. In this case, I'd choose the gradient boosting model for their exceptionally high and consistent performance across all datasets. 
+Let's take a closer look at other performance measures of this prediction model.
+
+```{r}
+pred_test_bestgb <- predict(best_gradient_boosting, test, type = "response", n.trees = 159)
+pred_cat_test_gb <- as.factor(ifelse(pred_test_bestgb < 0.5, 0, 1))
+confusionMatrix(pred_cat_test_gb, test$diagnosis)
+```
+The gradient boosting model correctly predicted 163 out of 171 diagnoses, giving us an accuracy of 95.32%. This performance measure, however, could be misleading especially when we have an imbalanced dataset like in this case. Fortunately, we have a better balanced accuracy of 95.59%, implying that the classifier actually performs equally well on either classes rather than take advantages of the skewed dataset. 
+
+```{r fig.align= "center"}
+rel_inf_gb <- as.data.frame(summary.gbm(best_gradient_boosting, plotit = FALSE))
+rel_inf_gb %>% 
+  arrange(desc(rel.inf)) %>%
+  top_n(4) %>%
+  ggplot(aes(x = var, 
+             y = rel.inf,
+             fill = rel.inf)) +
+  geom_col() +
+  coord_flip() +
+  xlab('Features') +
+  ylab('Relative Influence') +
+  ggtitle("Top 4 Predictors of Breast Cancer") +
+  theme_minimal()
+```
+Based on this gradient boosting model, the top most influential variables are *uniformity_size*, *uniformity_shape*, *bland_chromatin*, and *clump_thickness*.  
+
+### <a id="**Conclusion**"></a>**Conclusion**
+
+In this project, we've created a classification machine learning model that can predict if a person has breast cancer based on digitized image readings of his/her fine-needle aspirates. The model correctly distinguishes a benign lump from a malignant tumor more than 95% of the times. The four most significant cytological characteristics in identifying breast cancer are the uniformity of cell size, the uniformity of cell shape, the uniformity of nucleus texture, and the thickness of the clump.
+
