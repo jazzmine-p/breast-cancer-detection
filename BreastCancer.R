@@ -21,7 +21,7 @@ str(data)
 data <- data[data$bare_nuclei != "?",]
 
 # Remove the patient's unique identifier 
-data <- select(data, -1)
+data <- select(data, -1) 
 
 # Change the dependent variable into a binary variable where 2 means "benign" and 4 means "malignant"
 data <- data %>% mutate(diagnosis = ifelse(diagnosis == 2, 0, 1),
