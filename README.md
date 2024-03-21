@@ -1,6 +1,8 @@
 # Breast Cancer Detection
 This project aims to predict whether an individual has breast cancer and determine which cytological attributes are significant in identifying benign and malignant tumors.
 
+The markdown can be viewed on [RPubs](https://rpubs.com/jazzmine/breast-cancer-ml)
+
 ## Problem Identification
 Breast cancer is the second most common and also the second leading cause of cancer deaths in women in the United States. According to the American Cancer Society, on average every 1 in 8 women in the United States would develop breast cancer in her lifetime and 2.6% would die from breast cancer. One of the warning symptoms of breast cancer is the development of a tumor in the breast. A tumor, however, could be either benign or malignant.
 
